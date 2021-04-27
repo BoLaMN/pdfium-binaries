@@ -38,7 +38,8 @@ PDFium_ARTIFACT_BASE="$PWD/pdfium-$OS"
 [ "$TARGET_CPU" != "" ] && PDFium_ARTIFACT_BASE="$PDFium_ARTIFACT_BASE-$TARGET_CPU"
 [ "$PDFium_V8" == "enabled" ] && PDFium_ARTIFACT_BASE="$PDFium_ARTIFACT_BASE-v8"
 [ "$CONFIGURATION" == "Debug" ] && PDFium_ARTIFACT_BASE="$PDFium_ARTIFACT_BASE-debug"
-PDFium_ARTIFACT="$PDFium_ARTIFACT_BASE.tgz"
+[ "$STATIC" == true ] && PDFium_ARTIFACT_BASE="$PDFium_ARTIFACT_BASE-static"
+PDFium_ARTIFACT="$PDFium_ARTIFACT_BASE.tar.gz"
 
 rm -fr "$DepotTools_DIR"
 
@@ -66,7 +67,9 @@ gclient sync --no-history --shallow
 
 # Patch
 cd "$PDFium_SOURCE_DIR"
-git apply -v "$PDFium_PATCH_DIR/shared_library.patch"
+if [ "$STATIC" != true ]; then
+  git apply -v "$PDFium_PATCH_DIR/shared_library.patch"
+fi
 git apply -v "$PDFium_PATCH_DIR/relative_includes.patch"
 #git apply -v "$PDFium_PATCH_DIR/static_libstdcxx.patch"
 [ "$PDFium_V8" == "enabled" ] && git apply -v "$PDFium_PATCH_DIR/v8_init.patch"
@@ -78,6 +81,7 @@ cp "$PDFium_ARGS" "$PDFium_BUILD_DIR/args.gn"
 [ "$PDFium_V8" == "enabled" ] && echo 'pdf_enable_xfa=true' >> "$PDFium_BUILD_DIR/args.gn"
 [ "$OS" == "darwin" ] && echo 'mac_deployment_target = "10.10.0"' >> "$PDFium_BUILD_DIR/args.gn"
 [ "$TARGET_CPU" != "" ] && echo "target_cpu=\"$TARGET_CPU\"" >> "$PDFium_BUILD_DIR/args.gn"
+[ "$STATIC" = true ] && echo 'pdf_is_complete_lib=true' >> "$PDFium_BUILD_DIR/args.gn"
 
 # Generate Ninja files
 gn gen "$PDFium_BUILD_DIR"
@@ -93,8 +97,12 @@ cp -R "$PDFium_SOURCE_DIR/public" "$PDFium_INCLUDE_DIR"
 rm -f "$PDFium_INCLUDE_DIR/DEPS"
 rm -f "$PDFium_INCLUDE_DIR/README"
 rm -f "$PDFium_INCLUDE_DIR/PRESUBMIT.py"
-[ "$OS" == "linux" ] && mv "$PDFium_BUILD_DIR/libpdfium.so" "$PDFium_LIB_DIR"
-[ "$OS" == "darwin" ] && mv "$PDFium_BUILD_DIR/libpdfium.dylib" "$PDFium_LIB_DIR"
+if [ "$STATIC" = true ]; then
+  mv "$PDFium_BUILD_DIR/obj/libpdfium.a" "$PDFium_LIB_DIR"
+else
+  [ "$OS" == "linux" ] && mv "$PDFium_BUILD_DIR/libpdfium.so" "$PDFium_LIB_DIR"
+  [ "$OS" == "darwin" ] && mv "$PDFium_BUILD_DIR/libpdfium.dylib" "$PDFium_LIB_DIR"
+fi
 if [ "$PDFium_V8" == "enabled" ]; then
   mkdir -p "$PDFium_RES_DIR"
   mv "$PDFium_BUILD_DIR/icudtl.dat" "$PDFium_RES_DIR"
@@ -103,4 +111,4 @@ fi
 
 # Pack
 cd "$PDFium_STAGING_DIR"
-tar cvf "$PDFium_ARTIFACT" -- *
+tar chzf "$PDFium_ARTIFACT" -- *

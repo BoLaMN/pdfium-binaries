@@ -25,6 +25,7 @@ set PDFium_RES_DIR=%PDFium_STAGING_DIR%\%PLATFORM%\res
 set PDFium_ARTIFACT_BASE=%CD%\pdfium-windows-%PLATFORM%
 if "%PDFium_V8%"=="enabled" set PDFium_ARTIFACT_BASE=%PDFium_ARTIFACT_BASE%-v8
 if "%CONFIGURATION%"=="Debug" set PDFium_ARTIFACT_BASE=%PDFium_ARTIFACT_BASE%-debug
+if "%STATIC%"=="true" set PDFium_ARTIFACT_BASE=%PDFium_ARTIFACT_BASE%-static
 set PDFium_ARTIFACT=%PDFium_ARTIFACT_BASE%.zip
 
 echo on
@@ -63,7 +64,9 @@ call %DepotTools_DIR%\python.bat -m pip install pywin32 || exit /b
 : Patch
 cd %PDFium_SOURCE_DIR%
 copy "%PDFium_PATCH_DIR%\resources.rc" . || exit /b
-git.exe apply -v "%PDFium_PATCH_DIR%\shared_library.patch" || exit /b
+if "%STATIC%"!="true" (
+    git.exe apply -v "%PDFium_PATCH_DIR%\shared_library.patch" || exit /b
+)
 git.exe apply -v "%PDFium_PATCH_DIR%\relative_includes.patch" || exit /b
 git.exe apply -v "%PDFium_PATCH_DIR%\widestring.patch" || exit /b
 if "%PDFium_V8%"=="enabled" git.exe apply -v "%PDFium_PATCH_DIR%\v8_init.patch" || exit /b
@@ -75,6 +78,7 @@ if "%CONFIGURATION%"=="Release" echo is_debug=false >> %PDFium_BUILD_DIR%\args.g
 if "%PLATFORM%"=="x86" echo target_cpu="x86" >> %PDFium_BUILD_DIR%\args.gn
 if "%PDFium_V8%"=="enabled" echo pdf_enable_v8=true >> %PDFium_BUILD_DIR%\args.gn
 if "%PDFium_V8%"=="enabled" echo pdf_enable_xfa=true >> %PDFium_BUILD_DIR%\args.gn
+if "%STATIC%"=="true" echo pdf_is_complete_lib=true >> %PDFium_BUILD_DIR%\args.gn
 
 : Generate Ninja files
 call gn gen %PDFium_BUILD_DIR% || exit /b
@@ -90,8 +94,12 @@ xcopy /S /Y %PDFium_SOURCE_DIR%\public %PDFium_INCLUDE_DIR%\ || exit /b
 del %PDFium_INCLUDE_DIR%\DEPS
 del %PDFium_INCLUDE_DIR%\README
 del %PDFium_INCLUDE_DIR%\PRESUBMIT.py
-move %PDFium_BUILD_DIR%\pdfium.dll.lib %PDFium_LIB_DIR% || exit /b
-move %PDFium_BUILD_DIR%\pdfium.dll %PDFium_BIN_DIR% || exit /b
+if "%STATIC%"!="true" (
+    move %PDFium_BUILD_DIR%\pdfium.a %PDFium_BIN_DIR% || exit /b
+) else (
+    move %PDFium_BUILD_DIR%\pdfium.dll.lib %PDFium_LIB_DIR% || exit /b
+    move %PDFium_BUILD_DIR%\pdfium.dll %PDFium_BIN_DIR% || exit /b
+)
 if "%CONFIGURATION%"=="Debug" move %PDFium_BUILD_DIR%\pdfium.dll.pdb %PDFium_BIN_DIR%
 if "%PDFium_V8%"=="enabled" (
     mkdir %PDFium_RES_DIR%
